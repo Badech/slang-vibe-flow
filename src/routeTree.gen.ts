@@ -9,11 +9,29 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SubmitRouteImport } from './routes/submit'
+import { Route as QuizRouteImport } from './routes/quiz'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as BrowseRouteImport } from './routes/browse'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LearnIdRouteImport } from './routes/learn.$id'
 
+const SubmitRoute = SubmitRouteImport.update({
+  id: '/submit',
+  path: '/submit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QuizRoute = QuizRouteImport.update({
+  id: '/quiz',
+  path: '/quiz',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -39,12 +57,18 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/browse': typeof BrowseRoute
   '/dashboard': typeof DashboardRoute
+  '/profile': typeof ProfileRoute
+  '/quiz': typeof QuizRoute
+  '/submit': typeof SubmitRoute
   '/learn/$id': typeof LearnIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/browse': typeof BrowseRoute
   '/dashboard': typeof DashboardRoute
+  '/profile': typeof ProfileRoute
+  '/quiz': typeof QuizRoute
+  '/submit': typeof SubmitRoute
   '/learn/$id': typeof LearnIdRoute
 }
 export interface FileRoutesById {
@@ -52,25 +76,74 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/browse': typeof BrowseRoute
   '/dashboard': typeof DashboardRoute
+  '/profile': typeof ProfileRoute
+  '/quiz': typeof QuizRoute
+  '/submit': typeof SubmitRoute
   '/learn/$id': typeof LearnIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/browse' | '/dashboard' | '/learn/$id'
+  fullPaths:
+    | '/'
+    | '/browse'
+    | '/dashboard'
+    | '/profile'
+    | '/quiz'
+    | '/submit'
+    | '/learn/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/browse' | '/dashboard' | '/learn/$id'
-  id: '__root__' | '/' | '/browse' | '/dashboard' | '/learn/$id'
+  to:
+    | '/'
+    | '/browse'
+    | '/dashboard'
+    | '/profile'
+    | '/quiz'
+    | '/submit'
+    | '/learn/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/browse'
+    | '/dashboard'
+    | '/profile'
+    | '/quiz'
+    | '/submit'
+    | '/learn/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BrowseRoute: typeof BrowseRoute
   DashboardRoute: typeof DashboardRoute
+  ProfileRoute: typeof ProfileRoute
+  QuizRoute: typeof QuizRoute
+  SubmitRoute: typeof SubmitRoute
   LearnIdRoute: typeof LearnIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/submit': {
+      id: '/submit'
+      path: '/submit'
+      fullPath: '/submit'
+      preLoaderRoute: typeof SubmitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/quiz': {
+      id: '/quiz'
+      path: '/quiz'
+      fullPath: '/quiz'
+      preLoaderRoute: typeof QuizRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -106,6 +179,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BrowseRoute: BrowseRoute,
   DashboardRoute: DashboardRoute,
+  ProfileRoute: ProfileRoute,
+  QuizRoute: QuizRoute,
+  SubmitRoute: SubmitRoute,
   LearnIdRoute: LearnIdRoute,
 }
 export const routeTree = rootRouteImport
