@@ -118,5 +118,3 @@ function Index() {
     </Layout>
   );
 }
-  );
-}
