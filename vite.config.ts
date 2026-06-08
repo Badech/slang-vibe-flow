@@ -21,6 +21,7 @@ import viteReact from "@vitejs/plugin-react";
 import tsConfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { nitro } from "nitro/vite";
 
 export default defineConfig({
   // Dedupe React + TanStack across the dep graph so we never end up with
@@ -38,14 +39,14 @@ export default defineConfig({
     tailwindcss(),
     tanstackStart({
       // Redirect TanStack Start's bundled server entry to src/server.ts (our
-      // SSR error wrapper). Same as before.
+      // SSR error wrapper).
       server: { entry: "server" },
-      // Ship to Vercel (spec §11). The Nitro `vercel` preset writes to
-      // `.output/` which Vercel picks up automatically.
-      nitro: {
-        preset: "vercel",
-      },
     }),
+    // Nitro builds the server output for deployment. It auto-detects Vercel
+    // during a Vercel build (sees `VERCEL=1` env var) and writes to
+    // `.vercel/output/`. Locally it falls back to the `node` preset and
+    // writes to `.output/`. No preset config needed.
+    nitro(),
     viteReact(),
     VitePWA({
       registerType: "autoUpdate",
