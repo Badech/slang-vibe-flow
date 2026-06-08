@@ -7,10 +7,12 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
+import { Toaster } from "sonner";
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { ClerkAuthProvider } from "../components/ClerkAuthProvider";
 
 function NotFoundComponent() {
   return (
@@ -35,21 +37,32 @@ function NotFoundComponent() {
 }
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  console.error(error);
+  console.error("[Root Error Boundary]", error);
   const router = useRouter();
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
+  const isDev = import.meta.env?.DEV === true;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
+      <div className="max-w-2xl w-full">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground text-center">
           This page didn't load
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-2 text-sm text-muted-foreground text-center">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
+
+        {/* In dev, show the full error so we can debug instead of guessing. */}
+        {isDev && error && (
+          <pre className="mt-6 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-xs text-destructive overflow-auto max-h-[50vh] whitespace-pre-wrap">
+            <div className="font-bold mb-2">{error.name}: {error.message}</div>
+            {error.stack}
+          </pre>
+        )}
+
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -122,9 +135,22 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
-    <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
-    </QueryClientProvider>
+    <ClerkAuthProvider>
+      <QueryClientProvider client={queryClient}>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+        <Toaster
+          theme="dark"
+          position="top-right"
+          richColors
+          closeButton
+          toastOptions={{
+            classNames: {
+              toast: "rounded-xl border border-border bg-card text-foreground",
+            },
+          }}
+        />
+      </QueryClientProvider>
+    </ClerkAuthProvider>
   );
 }

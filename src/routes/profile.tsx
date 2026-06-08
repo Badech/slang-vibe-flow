@@ -7,8 +7,15 @@ import { XPBar } from "@/components/XPBar";
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
 import { Heart, BookOpen, CalendarDays, MessageSquarePlus } from "lucide-react";
 
+import { requireAuth } from "@/lib/auth";
+import { makeRouteError } from "@/components/ErrorBoundary";
+import { ProfileSkeleton } from "@/components/skeletons";
+
 export const Route = createFileRoute("/profile")({
+  beforeLoad: ({ location }) => requireAuth(location.href),
   head: () => ({ meta: [{ title: "Profile — SlangFlow" }] }),
+  pendingComponent: ProfileSkeleton,
+  errorComponent: makeRouteError("profile"),
   component: Profile,
 });
 

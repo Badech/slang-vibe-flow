@@ -7,20 +7,34 @@ import { TERMS } from "@/lib/data/terms";
 import { Flame, Sparkles, MessageCircle, BookOpen, Heart, Trophy, ArrowRight } from "lucide-react";
 import { TermCard } from "@/components/TermCard";
 
+import { requireAuth } from "@/lib/auth";
+import { useAuthState } from "@/hooks/useAuthState";
+import { useDailyTerms, useUserStats } from "@/lib/queries";
+import { makeRouteError } from "@/components/ErrorBoundary";
+import { DashboardSkeleton } from "@/components/skeletons";
+
 export const Route = createFileRoute("/dashboard")({
+  beforeLoad: ({ location }) => requireAuth(location.href),
   head: () => ({ meta: [{ title: "Dashboard — SlangFlow" }] }),
+  pendingComponent: DashboardSkeleton,
+  errorComponent: makeRouteError("dashboard"),
   component: Dashboard,
 });
 
 function Dashboard() {
-  const { xp, streak, progress, recordActivity, userName } = useApp();
+  const { xp: localXp, streak: localStreak, progress, recordActivity, userName } = useApp();
+  const auth = useAuthState();
+  const { data: daily } = useDailyTerms();
+  const { data: serverStats } = useUserStats(auth.userId);
 
-  // Pick deterministic "today" featured terms
-  const dayIndex = Math.floor(Date.now() / 86400000);
-  const idioms = TERMS.filter((t) => t.type === "idiom");
-  const slang = TERMS.filter((t) => t.type !== "idiom");
-  const featuredIdiom = idioms[dayIndex % idioms.length];
-  const featuredSlang = slang[dayIndex % slang.length];
+  // Prefer server stats when authed; fall back to local store for dev/mock.
+  const xp = serverStats?.xp ?? localXp;
+  const streak = serverStats?.streakCount ?? localStreak;
+
+  // Daily terms come from /api/terms/daily (with static fallback baked into
+  // useDailyTerms' initialData), so the UI never blanks even on first load.
+  const featuredIdiom = daily?.idiom ?? TERMS.filter((t) => t.type === "idiom")[0];
+  const featuredSlang = daily?.slang ?? TERMS.filter((t) => t.type !== "idiom")[0];
 
   const stats = useMemo(() => {
     const values = Object.values(progress);
@@ -36,7 +50,7 @@ function Dashboard() {
     <Layout>
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8" onClick={recordActivity}>
         <div>
-          <p className="text-muted-foreground text-sm">Welcome back{userName ? `, ${userName}` : ""} 👋</p>
+          <p className="text-muted-foreground text-sm">Welcome back{auth.displayName ? `, ${auth.displayName}` : userName ? `, ${userName}` : ""} 👋</p>
           <h1 className="font-display text-4xl md:text-5xl">Your daily flow</h1>
         </div>
 

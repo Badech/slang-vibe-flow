@@ -1,10 +1,22 @@
 import { createFileRoute, Link, useParams, notFound } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { Heart, CheckCircle2, AlertTriangle } from "lucide-react";
+
+import { toast } from "sonner";
+
 import { Layout } from "@/components/Layout";
+import { LearnDetailSkeleton } from "@/components/skeletons";
+import { makeRouteError } from "@/components/ErrorBoundary";
+import { PhoneticDisplay } from "@/components/PhoneticDisplay";
+import { SlowModeToggle } from "@/components/SlowModeToggle";
+import { SoundLikeNative } from "@/components/SoundLikeNative";
+import { SpeakerButton } from "@/components/SpeakerButton";
+import { VoiceSelector } from "@/components/VoiceSelector";
+import { useAuthState } from "@/hooks/useAuthState";
+import { usePronunciation } from "@/hooks/usePronunciation";
 import { getTerm, TERMS_BY_ID } from "@/lib/data/terms";
-import { Heart, CheckCircle2, Volume2, Turtle, Sparkles, AlertTriangle, Users, Wand2, ArrowUpRight } from "lucide-react";
+import { useUpsertProgress } from "@/lib/queries";
 import { useApp } from "@/lib/store";
-import { listEnglishVoices, speak, stopSpeaking } from "@/lib/tts";
+import { speakableText } from "@/lib/tts";
 
 export const Route = createFileRoute("/learn/$id")({
   loader: ({ params }) => {
@@ -14,9 +26,31 @@ export const Route = createFileRoute("/learn/$id")({
   },
   head: ({ params }) => {
     const t = TERMS_BY_ID[params.id];
-    return { meta: [{ title: t ? `${t.term} — SlangFlow` : "Term — SlangFlow" }, { name: "description", content: t?.definition }] };
+    const appUrl = (import.meta.env?.VITE_APP_URL as string | undefined) ?? "";
+    const canonical = appUrl ? `${appUrl.replace(/\/$/, "")}/learn/${params.id}` : undefined;
+    if (!t) return { meta: [{ title: "Term — SlangFlow" }] };
+    const title = `${t.term} — meaning, examples & pronunciation | SlangFlow`;
+    const description = `${t.term}: ${t.definition} Hear native pronunciation, see real examples, and learn when (and when not) to use it.`;
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { property: "og:type", content: "article" },
+        { name: "twitter:card", content: "summary" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
+      ],
+      links: canonical ? [{ rel: "canonical", href: canonical }] : [],
+    };
   },
   component: LearnDetail,
+  pendingComponent: () => (
+    <Layout>
+      <LearnDetailSkeleton />
+    </Layout>
+  ),
   notFoundComponent: () => (
     <Layout>
       <div className="mx-auto max-w-2xl px-4 py-20 text-center">
@@ -25,56 +59,49 @@ export const Route = createFileRoute("/learn/$id")({
       </div>
     </Layout>
   ),
-  errorComponent: ({ error }) => (
-    <Layout>
-      <div className="mx-auto max-w-2xl px-4 py-20 text-center">
-        <h1 className="font-display text-3xl">Couldn't load this term</h1>
-        <p className="text-muted-foreground mt-2">{error.message}</p>
-      </div>
-    </Layout>
-  ),
+  errorComponent: makeRouteError("learn-detail"),
 });
 
 function LearnDetail() {
   const { id } = useParams({ from: "/learn/$id" });
   const term = getTerm(id);
   const { progress, setStatus, toggleFavorite, addXp, recordActivity } = useApp();
-  const [speaking, setSpeaking] = useState(false);
-  const [slow, setSlow] = useState(false);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [voiceURI, setVoiceURI] = useState<string>("");
+  const auth = useAuthState();
+  const upsert = useUpsertProgress(auth.userId);
 
-  useEffect(() => {
-    const load = () => {
-      const list = listEnglishVoices();
-      setVoices(list);
-      if (!voiceURI && list[0]) setVoiceURI(list.find((v) => v.lang === "en-US")?.voiceURI ?? list[0].voiceURI);
-    };
-    load();
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.onvoiceschanged = load;
-    }
-    return () => stopSpeaking();
-  }, [voiceURI]);
+  // Pronunciation: hook owns voice list, slow mode, and speaking state. We
+  // ALWAYS speak the expanded form (NGL → "Not gonna lie") via speakableText,
+  // per spec §2.
+  const tts = usePronunciation();
 
   if (!term) return null;
   const p = progress[term.id];
   const isFav = p?.favorited;
   const isLearned = p?.status === "learned" || p?.status === "mastered";
 
-  const handleSpeak = () => {
-    const voice = voices.find((v) => v.voiceURI === voiceURI) ?? null;
-    const u = speak(term.term, { rate: slow ? 0.55 : 1, voice });
-    if (u) {
-      setSpeaking(true);
-      u.onend = () => setSpeaking(false);
+  const handleSpeak = () => tts.speak(speakableText(term));
+
+  const handleLearned = () => {
+    if (isLearned) return;
+    setStatus(term.id, "learned");
+    addXp(10); // spec §6: +10 per term marked learned
+    recordActivity();
+    toast.success(`Learned "${term.term}" — +10 XP`);
+    if (auth.userId) {
+      upsert.mutate({ termId: term.id, status: "learned" });
     }
   };
 
-  const handleLearned = () => {
-    setStatus(term.id, "learned");
-    addXp(20);
-    recordActivity();
+  const handleFavorite = () => {
+    const willFavorite = !isFav;
+    toggleFavorite(term.id);
+    if (willFavorite) {
+      addXp(5); // spec §6: +5 per favorited
+      toast(`Added to favorites — +5 XP`, { icon: "❤️" });
+    }
+    if (auth.userId) {
+      upsert.mutate({ termId: term.id, favorited: willFavorite });
+    }
   };
 
   return (
@@ -85,41 +112,39 @@ function LearnDetail() {
         {/* Hero */}
         <div className="space-y-4">
           <div className="flex gap-2 flex-wrap">
-            <Badge text={term.type === "idiom" ? "IDIOM" : term.type === "abbreviation" ? "ABBREVIATION" : "TEXT SLANG"} tone={term.type === "idiom" ? "primary" : "accent"} />
+            <Badge
+              text={term.type === "idiom" ? "IDIOM" : term.type === "abbreviation" ? "ABBREVIATION" : "TEXT SLANG"}
+              tone={term.type === "idiom" ? "primary" : "accent"}
+            />
             <Badge text={term.category} tone="muted" />
             <Badge text={`Level ${term.difficulty}`} tone="muted" />
           </div>
           <h1 className="font-display text-5xl md:text-7xl leading-none">{term.term}</h1>
-          {term.phonetic && (
-            <p className="font-mono text-lg text-muted-foreground">{term.phonetic}</p>
-          )}
+
+          <div className="flex flex-wrap items-center gap-3">
+            <PhoneticDisplay phonetic={term.phonetic} />
+            {term.type !== "idiom" && (
+              <span className="text-sm text-muted-foreground italic">
+                Spoken: <span className="font-mono not-italic text-foreground">"{speakableText(term)}"</span>
+              </span>
+            )}
+          </div>
 
           {/* TTS Controls */}
           <div className="flex flex-wrap gap-3 items-center pt-2">
-            <button
+            <SpeakerButton
               onClick={handleSpeak}
-              className={`px-5 py-3 rounded-xl bg-primary text-primary-foreground font-semibold flex items-center gap-2 hover:scale-105 transition-transform ${speaking ? "animate-pulse-glow" : ""}`}
-            >
-              <Volume2 className="w-4 h-4" /> Hear it
-            </button>
-            <button
-              onClick={() => setSlow(!slow)}
-              className={`px-4 py-3 rounded-xl border font-semibold flex items-center gap-2 transition-colors ${
-                slow ? "border-accent text-accent bg-accent/10" : "border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Turtle className="w-4 h-4" /> Slow mode
-            </button>
-            {voices.length > 0 && (
-              <select
-                value={voiceURI}
-                onChange={(e) => setVoiceURI(e.target.value)}
-                className="px-3 py-3 rounded-xl bg-card border border-border text-sm text-foreground focus:border-primary outline-none"
-              >
-                {voices.map((v) => (
-                  <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>
-                ))}
-              </select>
+              isSpeaking={tts.isSpeaking}
+              disabled={!tts.supported}
+              size="lg"
+              label={tts.isSpeaking ? "Speaking…" : "Hear it"}
+            />
+            <SlowModeToggle slow={tts.slow} onToggle={tts.toggleSlow} disabled={!tts.supported} />
+            <VoiceSelector voices={tts.voices} voice={tts.voice} onChange={tts.setVoice} />
+            {!tts.supported && (
+              <span className="text-xs text-muted-foreground">
+                Pronunciation playback isn't supported in this browser.
+              </span>
             )}
           </div>
         </div>
@@ -128,7 +153,9 @@ function LearnDetail() {
         <Card>
           <h2 className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Definition</h2>
           <p className="text-xl text-foreground">{term.definition}</p>
-          <p className="text-sm text-muted-foreground mt-3 italic">Origin: {term.origin}</p>
+          {term.origin && (
+            <p className="text-sm text-muted-foreground mt-3 italic">Origin: {term.origin}</p>
+          )}
         </Card>
 
         {/* Examples */}
@@ -155,22 +182,8 @@ function LearnDetail() {
           </div>
         </Card>
 
-        {/* Sound Like a Native */}
-        <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 via-accent/5 to-transparent p-6 space-y-5">
-          <div className="flex items-center gap-2 text-primary text-xs font-bold tracking-wider">
-            <Sparkles className="w-4 h-4" /> SOUND LIKE A NATIVE
-          </div>
-          <NativeRow icon={Wand2} title="When to use it" text={term.nativeTip.whenToUse} />
-          <NativeRow icon={Volume2} title="Tone & register" text={term.nativeTip.toneRegister} />
-          <NativeRow icon={Users} title="Who says this" text={term.nativeTip.whoSaysIt} />
-          <NativeRow icon={AlertTriangle} title="Red flags" text={term.nativeTip.redFlag} tone="accent" />
-          <div className="rounded-xl bg-card border border-border p-4">
-            <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-accent mb-2">
-              <ArrowUpRight className="w-4 h-4" /> UPGRADE
-            </div>
-            <p className="text-foreground">Natives often follow up with: <span className="font-semibold text-accent">"{term.nativeTip.upgrade}"</span></p>
-          </div>
-        </div>
+        {/* Sound Like a Native — the core feature (spec §3) */}
+        <SoundLikeNative term={term} />
 
         {/* Related */}
         {term.related && term.related.length > 0 && (
@@ -181,7 +194,12 @@ function LearnDetail() {
                 const r = getTerm(rid);
                 if (!r) return null;
                 return (
-                  <Link key={rid} to="/learn/$id" params={{ id: rid }} className="px-3 py-1.5 rounded-full bg-secondary text-secondary-foreground text-sm hover:bg-primary hover:text-primary-foreground transition-colors">
+                  <Link
+                    key={rid}
+                    to="/learn/$id"
+                    params={{ id: rid }}
+                    className="px-3 py-1.5 rounded-full bg-secondary text-secondary-foreground text-sm hover:bg-primary hover:text-primary-foreground transition-colors"
+                  >
                     {r.term}
                   </Link>
                 );
@@ -201,7 +219,7 @@ function LearnDetail() {
             <CheckCircle2 className="w-5 h-5" /> {isLearned ? "Learned" : "Mark as learned"}
           </button>
           <button
-            onClick={() => toggleFavorite(term.id)}
+            onClick={handleFavorite}
             className={`px-5 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 border transition-colors ${
               isFav ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground hover:text-accent hover:border-accent/50"
             }`}
@@ -224,16 +242,4 @@ function Badge({ text, tone }: { text: string; tone: "primary" | "accent" | "mut
 function Card({ children, tone }: { children: React.ReactNode; tone?: "destructive" }) {
   const cls = tone === "destructive" ? "border-destructive/30 bg-destructive/5" : "border-border bg-card";
   return <div className={`rounded-2xl border p-6 ${cls}`}>{children}</div>;
-}
-
-function NativeRow({ icon: Icon, title, text, tone }: { icon: typeof Wand2; title: string; text: string; tone?: "accent" }) {
-  return (
-    <div className="flex items-start gap-3">
-      <Icon className={`w-4 h-4 mt-1 ${tone === "accent" ? "text-accent" : "text-primary"}`} />
-      <div>
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">{title}</div>
-        <div className="text-foreground">{text}</div>
-      </div>
-    </div>
-  );
 }

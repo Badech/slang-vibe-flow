@@ -13,9 +13,11 @@ import { Route as SubmitRouteImport } from './routes/submit'
 import { Route as QuizRouteImport } from './routes/quiz'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as CommunityRouteImport } from './routes/community'
 import { Route as BrowseRouteImport } from './routes/browse'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LearnIdRouteImport } from './routes/learn.$id'
+import { Route as AdminSubmissionsRouteImport } from './routes/admin.submissions'
 
 const SubmitRoute = SubmitRouteImport.update({
   id: '/submit',
@@ -37,6 +39,11 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CommunityRoute = CommunityRouteImport.update({
+  id: '/community',
+  path: '/community',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BrowseRoute = BrowseRouteImport.update({
   id: '/browse',
   path: '/browse',
@@ -52,33 +59,44 @@ const LearnIdRoute = LearnIdRouteImport.update({
   path: '/learn/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminSubmissionsRoute = AdminSubmissionsRouteImport.update({
+  id: '/admin/submissions',
+  path: '/admin/submissions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/browse': typeof BrowseRoute
+  '/community': typeof CommunityRoute
   '/dashboard': typeof DashboardRoute
   '/profile': typeof ProfileRoute
   '/quiz': typeof QuizRoute
   '/submit': typeof SubmitRoute
+  '/admin/submissions': typeof AdminSubmissionsRoute
   '/learn/$id': typeof LearnIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/browse': typeof BrowseRoute
+  '/community': typeof CommunityRoute
   '/dashboard': typeof DashboardRoute
   '/profile': typeof ProfileRoute
   '/quiz': typeof QuizRoute
   '/submit': typeof SubmitRoute
+  '/admin/submissions': typeof AdminSubmissionsRoute
   '/learn/$id': typeof LearnIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/browse': typeof BrowseRoute
+  '/community': typeof CommunityRoute
   '/dashboard': typeof DashboardRoute
   '/profile': typeof ProfileRoute
   '/quiz': typeof QuizRoute
   '/submit': typeof SubmitRoute
+  '/admin/submissions': typeof AdminSubmissionsRoute
   '/learn/$id': typeof LearnIdRoute
 }
 export interface FileRouteTypes {
@@ -86,38 +104,46 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/browse'
+    | '/community'
     | '/dashboard'
     | '/profile'
     | '/quiz'
     | '/submit'
+    | '/admin/submissions'
     | '/learn/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/browse'
+    | '/community'
     | '/dashboard'
     | '/profile'
     | '/quiz'
     | '/submit'
+    | '/admin/submissions'
     | '/learn/$id'
   id:
     | '__root__'
     | '/'
     | '/browse'
+    | '/community'
     | '/dashboard'
     | '/profile'
     | '/quiz'
     | '/submit'
+    | '/admin/submissions'
     | '/learn/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BrowseRoute: typeof BrowseRoute
+  CommunityRoute: typeof CommunityRoute
   DashboardRoute: typeof DashboardRoute
   ProfileRoute: typeof ProfileRoute
   QuizRoute: typeof QuizRoute
   SubmitRoute: typeof SubmitRoute
+  AdminSubmissionsRoute: typeof AdminSubmissionsRoute
   LearnIdRoute: typeof LearnIdRoute
 }
 
@@ -151,6 +177,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/community': {
+      id: '/community'
+      path: '/community'
+      fullPath: '/community'
+      preLoaderRoute: typeof CommunityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/browse': {
       id: '/browse'
       path: '/browse'
@@ -172,18 +205,37 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LearnIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/submissions': {
+      id: '/admin/submissions'
+      path: '/admin/submissions'
+      fullPath: '/admin/submissions'
+      preLoaderRoute: typeof AdminSubmissionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BrowseRoute: BrowseRoute,
+  CommunityRoute: CommunityRoute,
   DashboardRoute: DashboardRoute,
   ProfileRoute: ProfileRoute,
   QuizRoute: QuizRoute,
   SubmitRoute: SubmitRoute,
+  AdminSubmissionsRoute: AdminSubmissionsRoute,
   LearnIdRoute: LearnIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

@@ -17,6 +17,22 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
   }
 });
 
+// NOTE on Clerk middleware:
+//
+// `@clerk/tanstack-react-start/server` exports a `clerkMiddleware()` that
+// must be added here for `auth()` to read the request context. We're
+// intentionally NOT importing it at module scope so the app boots in dev
+// without `CLERK_SECRET_KEY`. When you set up Clerk locally, wire it like:
+//
+//   import { clerkMiddleware } from "@clerk/tanstack-react-start/server";
+//   export const startInstance = createStart(() => ({
+//     requestMiddleware: [errorMiddleware, clerkMiddleware()],
+//   }));
+//
+// Until then `auth()` in `src/lib/auth.server.ts` returns anonymous and the
+// API routes that require sign-in respond 401 — which is the correct
+// behaviour for a server with no Clerk credentials.
+
 export const startInstance = createStart(() => ({
   requestMiddleware: [errorMiddleware],
 }));

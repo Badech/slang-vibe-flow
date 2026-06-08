@@ -1,19 +1,26 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import type { ReactNode } from "react";
-import { Flame, Home, Search, Trophy, User, PlusCircle, LogIn, LogOut } from "lucide-react";
+import { type ReactNode } from "react";
+import { Home, Search, Trophy, User, LogIn, Users } from "lucide-react";
+import { SignInButton, UserButton } from "@clerk/tanstack-react-start";
+
+import { StreakFlame } from "@/components/StreakFlame";
+import { useAuthState } from "@/hooks/useAuthState";
 import { useApp } from "@/lib/store";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: Home },
   { to: "/browse", label: "Browse", icon: Search },
   { to: "/quiz", label: "Quiz", icon: Trophy },
-  { to: "/submit", label: "Submit", icon: PlusCircle },
+  { to: "/community", label: "Community", icon: Users },
   { to: "/profile", label: "Profile", icon: User },
 ] as const;
 
+const clerkEnabled = Boolean(import.meta.env?.VITE_CLERK_PUBLISHABLE_KEY);
+
 export function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const { isSignedIn, signIn, signOut, streak } = useApp();
+  const auth = useAuthState();
+  const streak = useApp((s) => s.streak);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -45,27 +52,12 @@ export function Layout({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="flex items-center gap-3">
-            {isSignedIn && (
-              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/10 border border-accent/30">
-                <Flame className="w-4 h-4 text-accent animate-flicker" />
-                <span className="text-sm font-semibold">{streak}</span>
+            {auth.isSignedIn && (
+              <div className="hidden sm:block">
+                <StreakFlame streak={streak} size="sm" />
               </div>
             )}
-            {isSignedIn ? (
-              <button
-                onClick={signOut}
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
-              >
-                <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Sign out</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => signIn("Learner")}
-                className="text-sm font-semibold bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary-glow transition-colors flex items-center gap-1.5"
-              >
-                <LogIn className="w-4 h-4" /> Sign in
-              </button>
-            )}
+            <AuthControl isSignedIn={auth.isSignedIn} />
           </div>
         </div>
       </header>
@@ -98,5 +90,55 @@ export function Layout({ children }: { children: ReactNode }) {
         SlangFlow — sound like a native, not a textbook. © 2026
       </footer>
     </div>
+  );
+}
+
+// ── Auth control ────────────────────────────────────────────────────────────
+// When Clerk is configured: use the real <SignInButton> / <UserButton>.
+// When Clerk is absent: render local zustand-backed fallbacks so the dev UX
+// (no env vars) still has working sign-in/out for testing protected routes.
+function AuthControl({ isSignedIn }: { isSignedIn: boolean }) {
+  if (!clerkEnabled) {
+    return isSignedIn ? <FallbackUserButton /> : <FallbackSignInButton />;
+  }
+  return isSignedIn ? (
+    <UserButton afterSignOutUrl="/" />
+  ) : (
+    <SignInButton mode="modal">
+      <button
+        type="button"
+        className="text-sm font-semibold bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary-glow transition-colors flex items-center gap-1.5"
+      >
+        <LogIn className="w-4 h-4" /> Sign in
+      </button>
+    </SignInButton>
+  );
+}
+
+function FallbackSignInButton() {
+  const signIn = useApp((s) => s.signIn);
+  return (
+    <button
+      type="button"
+      onClick={() => signIn("Learner")}
+      className="text-sm font-semibold bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary-glow transition-colors flex items-center gap-1.5"
+    >
+      <LogIn className="w-4 h-4" /> Sign in
+    </button>
+  );
+}
+
+function FallbackUserButton() {
+  const userName = useApp((s) => s.userName);
+  const signOut = useApp((s) => s.signOut);
+  return (
+    <button
+      type="button"
+      onClick={signOut}
+      title="Sign out"
+      className="w-8 h-8 rounded-full bg-primary text-primary-foreground font-bold text-sm flex items-center justify-center hover:scale-105 transition-transform"
+    >
+      {(userName || "L").charAt(0).toUpperCase()}
+    </button>
   );
 }

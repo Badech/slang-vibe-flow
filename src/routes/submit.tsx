@@ -1,25 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Layout } from "@/components/Layout";
 import { useApp } from "@/lib/store";
 import type { TermType } from "@/lib/types";
 import { PlusCircle, Trophy } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+
+import { makeRouteError } from "@/components/ErrorBoundary";
+import { requireAuth } from "@/lib/auth";
+import { useAuthState } from "@/hooks/useAuthState";
+import { useSubmitCommunityTerm } from "@/lib/queries";
 
 export const Route = createFileRoute("/submit")({
+  beforeLoad: ({ location }) => requireAuth(location.href),
   head: () => ({ meta: [{ title: "Submit — SlangFlow" }] }),
+  errorComponent: makeRouteError("submit"),
   component: Submit,
 });
 
-const MOCK_LEADERBOARD = [
-  { name: "@native_nina", count: 42 },
-  { name: "@brooklynbri", count: 31 },
-  { name: "@tx_talker", count: 24 },
-  { name: "@slang_savant", count: 18 },
-  { name: "@gen.z.glossary", count: 12 },
-];
-
 function Submit() {
   const { addSubmission, submissions, userName, addXp } = useApp();
+  const auth = useAuthState();
+  const submitCommunity = useSubmitCommunityTerm();
   const [form, setForm] = useState({
     term: "",
     type: "idiom" as TermType,
@@ -32,17 +35,34 @@ function Submit() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.term.trim() || !form.definition.trim()) return;
+
+    // Optimistic local-store add so the user sees their submission immediately,
+    // even if the API call is still in flight or fails.
     addSubmission({
       id: String(Date.now()),
       ...form,
       status: "pending",
       createdAt: Date.now(),
-      submittedBy: userName || "anonymous",
+      submittedBy: auth.displayName || userName || "anonymous",
     });
     addXp(15);
     setSent(true);
     setForm({ term: "", type: "idiom", definition: "", example: "", context: "" });
     setTimeout(() => setSent(false), 3000);
+
+    // Persist server-side when authed; toast on success/failure.
+    if (auth.userId) {
+      submitCommunity.mutate(
+        { ...form },
+        {
+          onSuccess: () => toast.success("Submission sent for review 🎉"),
+          onError: (err) =>
+            toast.error("Couldn't reach the server — saved locally", {
+              description: err instanceof Error ? err.message : String(err),
+            }),
+        },
+      );
+    }
   };
 
   return (
@@ -137,23 +157,18 @@ function Submit() {
           )}
         </div>
 
-        {/* Leaderboard */}
-        <div className="rounded-2xl border border-border bg-card p-6">
-          <h2 className="font-display text-2xl mb-4 flex items-center gap-2"><Trophy className="w-5 h-5 text-primary" /> Top contributors this month</h2>
-          <ul className="space-y-2">
-            {MOCK_LEADERBOARD.map((u, i) => (
-              <li key={u.name} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-secondary transition-colors">
-                <span className="flex items-center gap-3">
-                  <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                    i === 0 ? "bg-primary text-primary-foreground" : i === 1 ? "bg-accent text-accent-foreground" : "bg-secondary text-muted-foreground"
-                  }`}>{i + 1}</span>
-                  <span className="font-semibold">{u.name}</span>
-                </span>
-                <span className="text-muted-foreground text-sm">{u.count} submissions</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {/* Leaderboard moved to /community — link out instead of duplicating the UI. */}
+        <Link
+          to="/community"
+          className="block rounded-2xl border border-border bg-card p-6 hover:border-primary/40 transition-colors"
+        >
+          <h2 className="font-display text-2xl flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-primary" /> See top contributors →
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Monthly leaderboard of approved community submissions.
+          </p>
+        </Link>
       </div>
     </Layout>
   );

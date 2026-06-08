@@ -1,13 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
 import { Layout } from "@/components/Layout";
-import { TERMS } from "@/lib/data/terms";
+import { SmartSearch, loadSavedFilters, saveFilters } from "@/components/SmartSearch";
 import { TermCard } from "@/components/TermCard";
-import { Search } from "lucide-react";
+import { TERMS } from "@/lib/data/terms";
 import { useApp } from "@/lib/store";
+import { makeRouteError } from "@/components/ErrorBoundary";
+import { BrowseSkeleton } from "@/components/skeletons";
 
 export const Route = createFileRoute("/browse")({
   head: () => ({ meta: [{ title: "Browse — SlangFlow" }] }),
+  pendingComponent: BrowseSkeleton,
+  errorComponent: makeRouteError("browse"),
   component: Browse,
 });
 
@@ -16,13 +21,22 @@ type Status = "all" | "unlearned" | "learned" | "favorited";
 type Sort = "popularity" | "alpha" | "recent" | "difficulty";
 
 function Browse() {
+  // Load persisted filters on mount (spec §8: "Filter persistence: save last
+  // active filters to localStorage").
+  const saved = useMemo(() => loadSavedFilters(), []);
+
   const [q, setQ] = useState("");
-  const [type, setType] = useState<TypeFilter>("all");
-  const [category, setCategory] = useState<string>("all");
-  const [difficulty, setDifficulty] = useState<number | "all">("all");
-  const [status, setStatus] = useState<Status>("all");
-  const [sort, setSort] = useState<Sort>("alpha");
+  const [type, setType] = useState<TypeFilter>((saved.type as TypeFilter) || "all");
+  const [category, setCategory] = useState<string>(saved.category || "all");
+  const [difficulty, setDifficulty] = useState<number | "all">(saved.difficulty ?? "all");
+  const [status, setStatus] = useState<Status>((saved.status as Status) || "all");
+  const [sort, setSort] = useState<Sort>((saved.sort as Sort) || "alpha");
   const [limit, setLimit] = useState(24);
+
+  // Persist filters on every change.
+  useEffect(() => {
+    saveFilters({ type, category, difficulty, status, sort });
+  }, [type, category, difficulty, status, sort]);
 
   const progress = useApp((s) => s.progress);
 
@@ -46,6 +60,9 @@ function Browse() {
     return list;
   }, [q, type, category, difficulty, status, sort, progress]);
 
+  // Candidate list for "did you mean…" suggestions (just term names).
+  const candidateNames = useMemo(() => TERMS.map((t) => t.term), []);
+
   return (
     <Layout>
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-6">
@@ -54,15 +71,11 @@ function Browse() {
           <p className="text-muted-foreground mt-1">Every idiom, slang term & abbreviation in SlangFlow.</p>
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search idioms, slang, or definitions…"
-            className="w-full pl-12 pr-4 py-3.5 rounded-xl bg-card border border-border focus:border-primary outline-none transition-colors"
-          />
-        </div>
+        <SmartSearch
+          onQueryChange={setQ}
+          candidates={candidateNames}
+          resultCount={filtered.length}
+        />
 
         <div className="flex flex-wrap gap-2">
           {(["all", "idiom", "slang"] as TypeFilter[]).map((t) => (
@@ -70,7 +83,9 @@ function Browse() {
               key={t}
               onClick={() => setType(t)}
               className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
-                type === t ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground border border-border"
+                type === t
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card text-muted-foreground hover:text-foreground border border-border"
               }`}
             >
               {t === "all" ? "All" : t === "idiom" ? "Idioms" : "Text slang & Abbr"}
@@ -79,20 +94,45 @@ function Browse() {
         </div>
 
         <div className="flex flex-wrap gap-3 items-center text-sm">
-          <Pill label="Category" value={category} onChange={setCategory} options={[["all", "All"], ...categories.map((c) => [c, c] as [string, string])]} />
+          <Pill
+            label="Category"
+            value={category}
+            onChange={setCategory}
+            options={[["all", "All"], ...categories.map((c) => [c, c] as [string, string])]}
+          />
           <Pill
             label="Difficulty"
             value={String(difficulty)}
             onChange={(v) => setDifficulty(v === "all" ? "all" : (Number(v) as 1 | 2 | 3))}
-            options={[["all", "All"], ["1", "Beginner"], ["2", "Intermediate"], ["3", "Advanced"]]}
+            options={[
+              ["all", "All"],
+              ["1", "Beginner"],
+              ["2", "Intermediate"],
+              ["3", "Advanced"],
+            ]}
           />
           <Pill
             label="Status"
             value={status}
             onChange={(v) => setStatus(v as Status)}
-            options={[["all", "All"], ["unlearned", "Unlearned"], ["learned", "Learned"], ["favorited", "Favorited"]]}
+            options={[
+              ["all", "All"],
+              ["unlearned", "Unlearned"],
+              ["learned", "Learned"],
+              ["favorited", "Favorited"],
+            ]}
           />
-          <Pill label="Sort" value={sort} onChange={(v) => setSort(v as Sort)} options={[["alpha", "A → Z"], ["difficulty", "Difficulty"], ["popularity", "Popular"], ["recent", "Recent"]]} />
+          <Pill
+            label="Sort"
+            value={sort}
+            onChange={(v) => setSort(v as Sort)}
+            options={[
+              ["alpha", "A → Z"],
+              ["difficulty", "Difficulty"],
+              ["popularity", "Popular"],
+              ["recent", "Recent"],
+            ]}
+          />
         </div>
 
         <div className="text-sm text-muted-foreground">{filtered.length} terms</div>
@@ -119,7 +159,10 @@ function Browse() {
 }
 
 function Pill<T extends string>({
-  label, value, onChange, options,
+  label,
+  value,
+  onChange,
+  options,
 }: {
   label: string;
   value: T;
@@ -135,7 +178,9 @@ function Pill<T extends string>({
         className="bg-card border border-border rounded-md px-2 py-1.5 text-sm text-foreground focus:border-primary outline-none"
       >
         {options.map(([v, l]) => (
-          <option key={v} value={v}>{l}</option>
+          <option key={v} value={v}>
+            {l}
+          </option>
         ))}
       </select>
     </label>

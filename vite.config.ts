@@ -1,15 +1,116 @@
-// @lovable.dev/vite-tanstack-config already includes the following — do NOT add them manually
-// or the app will break with duplicate plugins:
-//   - tanstackStart, viteReact, tailwindcss, tsConfigPaths, nitro (build-only using cloudflare as a default target),
-//     componentTagger (dev-only), VITE_* env injection, @ path alias, React/TanStack dedupe,
-//     error logger plugins, and sandbox detection (port/host/strictPort).
-// You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
-import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+// Vanilla TanStack Start + Vite config (npm-friendly).
+//
+// This file replaces the Lovable wrapper (`@lovable.dev/vite-tanstack-config`)
+// with the equivalent vanilla plugins so the project installs cleanly under
+// plain `npm install` — no scoped registry, no bun-only resolution.
+//
+// What the Lovable wrapper used to provide and what we wire manually below:
+//   - tanstackStart()       → TanStack Start SSR + nitro build pipeline
+//   - viteReact()           → React HMR + JSX
+//   - tailwindcss()         → Tailwind 4 zero-config
+//   - tsConfigPaths()       → resolves `@/*` from tsconfig.json paths
+//   - VITE_* env injection  → Vite already does this for VITE_-prefixed vars
+//   - React/TanStack dedupe → resolve.dedupe below
+//   - sandbox detection     → server: { port, host, strictPort } below
+//
+// PWA + Vercel preset (added in Turn 5) are layered on top.
+
+import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import tailwindcss from "@tailwindcss/vite";
+import viteReact from "@vitejs/plugin-react";
+import tsConfigPaths from "vite-tsconfig-paths";
+import { defineConfig } from "vite";
+import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
-  tanstackStart: {
-    // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
-    // nitro/vite builds from this
-    server: { entry: "server" },
+  // Dedupe React + TanStack across the dep graph so we never end up with
+  // two copies in the bundle (causes hooks-rule errors at runtime).
+  resolve: {
+    dedupe: ["react", "react-dom", "@tanstack/react-router", "@tanstack/react-query"],
   },
+  server: {
+    port: 5173,
+    host: true,
+    strictPort: false,
+  },
+  plugins: [
+    tsConfigPaths(),
+    tailwindcss(),
+    tanstackStart({
+      // Redirect TanStack Start's bundled server entry to src/server.ts (our
+      // SSR error wrapper). Same as before.
+      server: { entry: "server" },
+      // Ship to Vercel (spec §11). The Nitro `vercel` preset writes to
+      // `.output/` which Vercel picks up automatically.
+      nitro: {
+        preset: "vercel",
+      },
+    }),
+    viteReact(),
+    VitePWA({
+      registerType: "autoUpdate",
+      injectRegister: "auto",
+      manifestFilename: "manifest.webmanifest",
+      manifest: {
+        name: "SlangFlow — Talk like a native",
+        short_name: "SlangFlow",
+        description:
+          "Learn American idioms, slang & texting language. Sound like a native, not a textbook.",
+        theme_color: "#0a0a0a",
+        background_color: "#0a0a0a",
+        display: "standalone",
+        start_url: "/",
+        scope: "/",
+        orientation: "portrait",
+        icons: [
+          { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          {
+            src: "/icons/icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
+        categories: ["education", "lifestyle", "reference"],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,webp,woff2}"],
+        navigateFallback: "/",
+        navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            urlPattern: /\/api\/terms\/[^/]+$/,
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "slangflow-term-detail",
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /\/api\/terms(\?.*)?$/,
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "slangflow-term-list",
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "google-fonts",
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
+      devOptions: {
+        enabled: false,
+      },
+    }),
+  ],
 });
